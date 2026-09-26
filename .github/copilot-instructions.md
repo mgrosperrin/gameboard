@@ -15,15 +15,14 @@ obligatoire pour GitHub Pages) · Vitest + Testing Library · oxlint + oxfmt.
 
 ## Commandes
 
-| Commande               | Rôle                            |
-| ---------------------- | ------------------------------- |
-| `npm run dev`          | Serveur de développement        |
-| `npm run format`       | Formate le code (oxfmt)         |
-| `npm run format:check` | Vérifie le formatage            |
-| `npm run lint`         | Analyse statique (oxlint)       |
-| `npm run typecheck`    | `tsc -b --noEmit`               |
-| `npm run test`         | Tests Vitest                    |
-| `npm run build`        | Typecheck + build de production |
+| Commande            | Rôle                            |
+| ------------------- | ------------------------------- |
+| `npm run dev`       | Serveur de développement        |
+| `npm run format`    | Formate le code (oxfmt)         |
+| `npm run lint`      | Analyse statique (oxlint)       |
+| `npm run typecheck` | `tsc -b --noEmit`               |
+| `npm run test`      | Tests Vitest                    |
+| `npm run build`     | Typecheck + build de production |
 
 **Avant de considérer une tâche terminée** : `npm run format`, `npm run lint`, `npm run test` et
 `npm run build` doivent passer. Le workflow de déploiement exécute les mêmes étapes.
