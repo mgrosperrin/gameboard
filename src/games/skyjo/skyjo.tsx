@@ -1,21 +1,19 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
   Badge,
   Button,
   Card,
   Divider,
   Group,
   Image,
-  NativeSelect,
-  NumberInput,
+  Progress,
   SimpleGrid,
   Stack,
-  Stepper,
   Text,
 } from '@mantine/core';
-import { ArrowLeftIcon, ArrowRightIcon, PlusIcon } from '@phosphor-icons/react';
+import { ArrowLeftIcon, ArrowRightIcon, FlagCheckeredIcon } from '@phosphor-icons/react';
 
+import { selectableCardProps } from '../../components/selectableCardProps';
 import type { GameBoardProps, GameDefinition } from '../types';
 
 export interface SkyjoRound {
@@ -53,13 +51,31 @@ function totalCards(counts: Record<string, number> | undefined): number {
   return Object.values(counts ?? {}).reduce((total, count) => total + count, 0);
 }
 
+const maxCardsPerValue = 8;
+const maxCardsPerPlayer = 12;
+const doubleTapDelayMs = 350;
+const headerOffset = 64;
+
+// Évite le zoom du navigateur lors d'un double tap sur les cartes et les joueurs.
+const tapTargetStyle = { touchAction: 'manipulation', userSelect: 'none' } as const;
+
 function CardThumbnail({ value }: { value: number }) {
   return (
-    <Image src={cardImages[`./${value}.png`]} alt={`Carte Skyjo ${value}`} h={108} fit="contain" />
+    <Image src={cardImages[`./${value}.png`]} alt={`Carte Skyjo ${value}`} h={80} fit="contain" />
   );
 }
 
-function SkyjoBoard({ players, state, setState, isFinished }: GameBoardProps<SkyjoState>) {
+function currentTime(): number {
+  return Date.now();
+}
+
+interface LastTap {
+  key: string;
+  time: number;
+  added: boolean;
+}
+
+function SkyjoBoard({ players, setState, isFinished }: GameBoardProps<SkyjoState>) {
   const [activeStep, setActiveStep] = useState(0);
   const [completedBy, setCompletedBy] = useState<string | null>(null);
   const [cardCounts, setCardCounts] = useState<Record<string, Record<string, number>>>(() =>
@@ -71,18 +87,63 @@ function SkyjoBoard({ players, state, setState, isFinished }: GameBoardProps<Sky
     ),
   );
 
-  const selectedPlayer = players[activeStep - 1];
-  const selectedPlayerTotal = selectedPlayer ? totalCards(cardCounts[selectedPlayer.id]) : 0;
-  const selectedPlayerHasTooManyCards = selectedPlayerTotal >= 12;
+  const cardRef = useRef<HTMLDivElement>(null);
+  const isFirstRender = useRef(true);
+  const lastTap = useRef<LastTap | null>(null);
 
-  function setCount(playerId: string, value: number, count: number | string) {
-    setCardCounts((previous) => ({
-      ...previous,
-      [playerId]: {
-        ...previous[playerId],
-        [String(value)]: typeof count === 'number' ? count : 0,
-      },
-    }));
+  // La saisie des cartes commence par le joueur ayant terminé la manche, puis suit l'ordre de jeu
+  // en reprenant au début de la liste après le dernier joueur.
+  const finisherIndex = players.findIndex((player) => player.id === completedBy);
+  const orderedPlayers =
+    finisherIndex === -1
+      ? players
+      : [...players.slice(finisherIndex), ...players.slice(0, finisherIndex)];
+  const selectedPlayer = orderedPlayers[activeStep - 1];
+  const selectedPlayerTotal = selectedPlayer ? totalCards(cardCounts[selectedPlayer.id]) : 0;
+
+  // Ramène la saisie en haut de l'écran à chaque changement d'étape.
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    cardRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, [activeStep]);
+
+  function selectCompletedBy(playerId: string) {
+    setCompletedBy(playerId);
+    setActiveStep(1);
+  }
+
+  function changeCount(playerId: string, value: number, delta: number) {
+    setCardCounts((previous) => {
+      const counts = previous[playerId] ?? {};
+      const current = counts[String(value)] ?? 0;
+      if (delta > 0 && totalCards(counts) >= maxCardsPerPlayer) {
+        return previous;
+      }
+      const next = Math.min(maxCardsPerValue, Math.max(0, current + delta));
+      return { ...previous, [playerId]: { ...counts, [String(value)]: next } };
+    });
+  }
+
+  // Un tap ajoute une carte ; un double tap annule l'ajout du premier tap puis retire une carte.
+  function tapCard(playerId: string, value: number) {
+    const key = `${playerId}:${value}`;
+    const now = currentTime();
+    const previousTap = lastTap.current;
+    const counts = cardCounts[playerId] ?? {};
+
+    if (previousTap?.key === key && now - previousTap.time < doubleTapDelayMs) {
+      lastTap.current = null;
+      changeCount(playerId, value, previousTap.added ? -2 : -1);
+      return;
+    }
+
+    const added =
+      (counts[String(value)] ?? 0) < maxCardsPerValue && totalCards(counts) < maxCardsPerPlayer;
+    lastTap.current = { key, time: now, added };
+    changeCount(playerId, value, 1);
   }
 
   function addRound() {
@@ -125,74 +186,87 @@ function SkyjoBoard({ players, state, setState, isFinished }: GameBoardProps<Sky
   }
 
   return (
-    <Stack gap="md">
-      <Alert color="blue" variant="light">
-        Sélectionnez le joueur qui a terminé, puis le nombre de cartes restantes pour chaque valeur.
-        Les points sont calculés automatiquement.
-      </Alert>
+    <Card withBorder padding="sm" ref={cardRef} style={{ scrollMarginTop: headerOffset }}>
+      <Stack gap="xs">
+        <Progress value={((activeStep + 1) / (players.length + 1)) * 100} size="xs" />
 
-      <Card withBorder padding="sm">
-        <Stepper active={activeStep} onStepClick={isFinished ? undefined : setActiveStep}>
-          <Stepper.Step label="Fin de manche" description="Joueur terminant">
-            <Stack gap="sm" mt="md">
-              <Text fw={600}>Qui a terminé la manche ?</Text>
-              <NativeSelect
-                label="Joueur terminant"
-                disabled={isFinished}
-                value={completedBy ?? ''}
-                data={[
-                  { value: '', label: 'Sélectionner un joueur' },
-                  ...players.map((player) => ({ value: player.id, label: player.name })),
-                ]}
-                onChange={(event) => setCompletedBy(event.currentTarget.value || null)}
-              />
-            </Stack>
-          </Stepper.Step>
-
-          {players.map((player) => (
-            <Stepper.Step key={player.id} label={player.name} description="Cartes restantes">
-              {selectedPlayer?.id === player.id && (
-                <Stack gap="sm" mt="md">
-                  <Text size="sm" c="dimmed">
-                    Pour chaque carte, indiquez combien il en reste dans le jeu de {player.name}.
-                  </Text>
-                  <Alert color={selectedPlayerHasTooManyCards ? 'red' : 'gray'} variant="light">
-                    Total sélectionné : {selectedPlayerTotal} / 11 cartes maximum.
-                    {selectedPlayerHasTooManyCards && ' Le total doit être inférieur à 12.'}
-                  </Alert>
-                  <SimpleGrid cols={{ base: 2, xs: 3, sm: 5 }}>
-                    {cardValues.map((value) => (
-                      <Card key={value} withBorder padding="xs">
-                        <Stack gap="xs">
-                          <CardThumbnail value={value} />
-                          <NumberInput
-                            label="Nombre"
-                            min={0}
-                            max={8}
-                            allowDecimal={false}
-                            inputMode="numeric"
-                            disabled={isFinished}
-                            value={cardCounts[player.id]?.[String(value)] ?? 0}
-                            onChange={(count) => setCount(player.id, value, count)}
-                          />
-                        </Stack>
-                      </Card>
-                    ))}
-                  </SimpleGrid>
-                </Stack>
-              )}
-            </Stepper.Step>
-          ))}
-
-          <Stepper.Completed>
-            <Alert color="green" mt="md">
-              Toutes les cartes ont été saisies. Vérifiez le récapitulatif puis ajoutez la manche.
-            </Alert>
-          </Stepper.Completed>
-        </Stepper>
+        {selectedPlayer ? (
+          <>
+            <Group justify="space-between" wrap="nowrap">
+              <Text fw={700} size="lg" truncate>
+                {selectedPlayer.name}
+              </Text>
+              <Badge variant="light" size="lg">
+                {selectedPlayerTotal} / {maxCardsPerPlayer} cartes
+              </Badge>
+            </Group>
+            <SimpleGrid cols={3} spacing="xs" verticalSpacing="xs">
+              {cardValues.map((value) => {
+                const count = cardCounts[selectedPlayer.id]?.[String(value)] ?? 0;
+                return (
+                  <Card
+                    key={value}
+                    component="button"
+                    type="button"
+                    withBorder
+                    padding={6}
+                    pos="relative"
+                    disabled={isFinished}
+                    {...selectableCardProps(count > 0)}
+                    style={{ ...tapTargetStyle, cursor: isFinished ? 'default' : 'pointer' }}
+                    onClick={() => tapCard(selectedPlayer.id, value)}
+                  >
+                    <CardThumbnail value={value} />
+                    {count > 0 && (
+                      <Badge
+                        pos="absolute"
+                        top={4}
+                        right={4}
+                        size="lg"
+                        circle
+                        aria-label={`${count} en main`}
+                      >
+                        {count}
+                      </Badge>
+                    )}
+                  </Card>
+                );
+              })}
+            </SimpleGrid>
+          </>
+        ) : (
+          <>
+            <Text fw={700} size="lg">
+              Qui a terminé la manche ?
+            </Text>
+            <SimpleGrid cols={2}>
+              {players.map((player) => {
+                const selected = completedBy === player.id;
+                return (
+                  <Card
+                    key={player.id}
+                    component="button"
+                    type="button"
+                    withBorder
+                    padding="md"
+                    disabled={isFinished}
+                    aria-pressed={selected}
+                    {...selectableCardProps(selected)}
+                    style={{ ...tapTargetStyle, cursor: isFinished ? 'default' : 'pointer' }}
+                    onClick={() => selectCompletedBy(player.id)}
+                  >
+                    <Text fw={selected ? 700 : 500} ta="center" truncate>
+                      {player.name}
+                    </Text>
+                  </Card>
+                );
+              })}
+            </SimpleGrid>
+          </>
+        )}
 
         {!isFinished && (
-          <Group justify="space-between" mt="lg">
+          <Group justify="space-between" mt="xs">
             <Button
               variant="default"
               leftSection={<ArrowLeftIcon size={18} />}
@@ -201,53 +275,79 @@ function SkyjoBoard({ players, state, setState, isFinished }: GameBoardProps<Sky
             >
               Précédent
             </Button>
-            {activeStep < players.length ? (
+            {activeStep === 0 && (
               <Button
                 rightSection={<ArrowRightIcon size={18} />}
-                disabled={
-                  (activeStep === 0 && completedBy === null) || selectedPlayerHasTooManyCards
-                }
+                disabled={completedBy === null}
+                onClick={() => setActiveStep(1)}
+              >
+                Suivant
+              </Button>
+            )}
+            {activeStep > 0 && activeStep < players.length && (
+              <Button
+                rightSection={<ArrowRightIcon size={18} />}
                 onClick={() => setActiveStep((step) => step + 1)}
               >
                 Suivant
               </Button>
-            ) : (
-              <Button leftSection={<PlusIcon size={18} />} onClick={addRound}>
-                Ajouter la manche
+            )}
+            {activeStep === players.length && (
+              <Button leftSection={<FlagCheckeredIcon size={18} />} onClick={addRound}>
+                Terminer
               </Button>
             )}
           </Group>
         )}
-      </Card>
 
-      {getRounds(state).length > 0 && (
-        <Stack gap="xs">
-          <Text fw={600}>Manches enregistrées</Text>
-          {getRounds(state).map((round, roundIndex) => (
-            <Card key={roundIndex} withBorder padding="sm">
-              <Group justify="space-between" wrap="nowrap">
-                <Text fw={500}>Manche {roundIndex + 1}</Text>
-                <Group gap="xs">
-                  {round.scoreDoubled && <Badge color="orange">Score doublé</Badge>}
-                  <Text size="sm" c="dimmed">
-                    {round.completedBy
-                      ? `Terminée par ${players.find((player) => player.id === round.completedBy)?.name ?? 'un joueur'}`
-                      : 'Sans joueur terminant'}
-                  </Text>
-                </Group>
-              </Group>
-              <Divider my="xs" />
-              <SimpleGrid cols={{ base: 2, sm: 3 }}>
-                {players.map((player) => (
-                  <Text key={player.id} size="sm">
-                    {player.name} : {round.scores[player.id] ?? 0}
-                  </Text>
-                ))}
-              </SimpleGrid>
-            </Card>
-          ))}
-        </Stack>
-      )}
+        <Text size="xs" c="dimmed" ta="center">
+          Étape {activeStep + 1} / {players.length + 1} ·{' '}
+          {selectedPlayer
+            ? 'Tap : ajouter une carte · Double tap : en retirer une'
+            : 'Touchez le joueur qui a terminé : la saisie des cartes commencera par lui. Les points sont calculés automatiquement.'}
+        </Text>
+      </Stack>
+    </Card>
+  );
+}
+
+function SkyjoDetails({ players, state }: GameBoardProps<SkyjoState>) {
+  const rounds = getRounds(state);
+
+  if (rounds.length === 0) {
+    return (
+      <Text size="sm" c="dimmed">
+        Aucune manche enregistrée.
+      </Text>
+    );
+  }
+
+  return (
+    <Stack gap="xs">
+      <Text fw={600}>Manches enregistrées</Text>
+      {rounds.map((round, roundIndex) => (
+        <Card key={roundIndex} withBorder padding="sm">
+          <Group justify="space-between" wrap="nowrap">
+            <Text fw={500}>Manche {roundIndex + 1}</Text>
+            <Group gap="xs">
+              {round.scoreDoubled && <Badge color="orange">Score doublé</Badge>}
+              <Text size="sm" c="dimmed">
+                {round.completedBy
+                  ? `Terminée par ${players.find((player) => player.id === round.completedBy)?.name ?? 'un joueur'}`
+                  : 'Sans joueur terminant'}
+              </Text>
+            </Group>
+          </Group>
+          <Divider my="xs" />
+          <SimpleGrid cols={{ base: 2, sm: 3 }}>
+            {players.map((player) => (
+              <Text key={player.id} size="sm">
+                {player.name} : {round.scores[player.id] ?? 0}
+              </Text>
+            ))}
+          </SimpleGrid>
+        </Card>
+      ))}
     </Stack>
   );
 }
@@ -265,5 +365,7 @@ export const skyjo: GameDefinition<SkyjoState> = {
       playerId: player.id,
       score: getRounds(state).reduce((total, round) => total + (round.scores[player.id] ?? 0), 0),
     })),
+  showScoreboard: (state) => getRounds(state).length > 0,
   Board: SkyjoBoard,
+  Details: SkyjoDetails,
 };
