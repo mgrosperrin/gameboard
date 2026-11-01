@@ -24,8 +24,12 @@ export interface GameDefinition<TState = unknown> {
   computeScores: (state: TState, players: Player[]) => PlayerScore[];
   /** Higher score wins unless the game says otherwise. */
   lowerScoreWins?: boolean;
+  /** Whether the scoreboard is worth showing yet; defaults to always. */
+  showScoreboard?: (state: TState) => boolean;
   /** Screen rendered while the match is running. */
   Board: ComponentType<GameBoardProps<TState>>;
+  /** Optional game specific details, rendered in the collapsed "Avancé" section of the match. */
+  Details?: ComponentType<GameBoardProps<TState>>;
 }
 
 /** Erased variant used by the registry and the match shell, which are game agnostic. */
