@@ -74,3 +74,4 @@ shell générique : il ne connaît aucun jeu, il délègue au `GameDefinition` r
 - Les noms des joueurs sont snapshotés dans `Match.playerNames` : une partie terminée reste lisible
   même si le joueur est renommé ou supprimé. Ne pas résoudre les joueurs depuis le store des joueurs
   dans les écrans de partie.
+
