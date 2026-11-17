@@ -23,16 +23,18 @@ Enregistrer ensuite le jeu dans le tableau `games` de `src/games/registry.ts`.
 
 Implémenter `GameDefinition<TState>` (voir `src/games/types.ts`) :
 
-| Membre                    | Rôle                                                                   |
-| ------------------------- | ---------------------------------------------------------------------- |
-| `id`                      | Identifiant stable en kebab-case, **jamais modifié** après publication |
-| `name`                    | Nom affiché                                                            |
-| `description`             | Phrase courte en français                                              |
-| `minPlayers`/`maxPlayers` | Bornes vérifiées à la création de la partie                            |
-| `createInitialState`      | État initial, à partir des joueurs                                     |
-| `computeScores`           | Fonction **pure** dérivant les scores de l'état                        |
-| `lowerScoreWins`          | Optionnel, si le plus petit score gagne                                |
-| `Board`                   | Écran de partie, reçoit `GameBoardProps<TState>`                       |
+| Membre                    | Rôle                                                                    |
+| ------------------------- | ----------------------------------------------------------------------- |
+| `id`                      | Identifiant stable en kebab-case, **jamais modifié** après publication  |
+| `name`                    | Nom affiché                                                             |
+| `description`             | Phrase courte en français                                               |
+| `minPlayers`/`maxPlayers` | Bornes vérifiées à la création de la partie                             |
+| `createInitialState`      | État initial, à partir des joueurs                                      |
+| `computeScores`           | Fonction **pure** dérivant les scores de l'état                         |
+| `lowerScoreWins`          | Optionnel, si le plus petit score gagne                                 |
+| `showScoreboard`          | Optionnel, `false` tant que le tableau des scores n'a pas d'intérêt     |
+| `Board`                   | Écran de partie, reçoit `GameBoardProps<TState>`                        |
+| `Details`                 | Optionnel, détail du jeu (ex. manches) rangé dans la section « Avancé » |
 
 ## Règles
 
@@ -46,7 +48,8 @@ Implémenter `GameDefinition<TState>` (voir `src/games/types.ts`) :
   d'anciennes parties sont déjà stockées chez les utilisateurs.
 - **Ne pas gérer la persistance** : `Board` reçoit `state` et `setState`, la sauvegarde est faite par
   `MatchPage`. Toujours mettre à jour via une fonction de mise à jour immuable.
-- **Ne pas afficher de tableau des scores** dans `Board` : `MatchPage` rend déjà `Scoreboard`.
+- **Ne pas afficher de tableau des scores** dans `Board` : `MatchPage` rend déjà `Scoreboard`, en
+  haut de l'écran, avant le `Board`.
 - **Ne pas ajouter de bouton « terminer la partie »** dans `Board` sauf condition de fin propre au
   jeu ; utiliser alors la prop `finish`.
 - **Respecter `isFinished`** : quand la partie est terminée, les contrôles de saisie doivent être

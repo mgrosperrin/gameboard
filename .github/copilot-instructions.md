@@ -1,4 +1,4 @@
-# Instructions Copilot — Gameboard
+# Instructions Copilot — GameBoard
 
 Réponds toujours en français.
 

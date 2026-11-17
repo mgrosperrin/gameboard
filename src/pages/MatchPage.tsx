@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Alert, Badge, Button, Divider, Group, Stack, Text, Title } from '@mantine/core';
+import { Accordion, Alert, Badge, Button, Group, Stack, Text, Title } from '@mantine/core';
 import { ArrowsClockwiseIcon, CheckIcon, TrashIcon } from '@phosphor-icons/react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -43,6 +43,20 @@ export function MatchPage() {
 
   const isFinished = match.finishedAt !== null;
   const Board = game.Board;
+  const Details = game.Details;
+  const boardProps = {
+    players,
+    state: match.state,
+    setState: (next: unknown) =>
+      updateMatchState(
+        match.id,
+        typeof next === 'function' ? (next as (previous: unknown) => unknown)(match.state) : next,
+      ),
+    scores,
+    isFinished,
+    finish: () => finishMatch(match.id),
+    reopen: () => reopenMatch(match.id),
+  };
 
   return (
     <Stack gap="lg">
@@ -53,57 +67,50 @@ export function MatchPage() {
         </Badge>
       </Group>
 
-      <Text size="sm" c="dimmed">
-        Démarrée le {new Date(match.createdAt).toLocaleString('fr-FR')}
-      </Text>
+      {(game.showScoreboard?.(match.state) ?? true) && (
+        <Scoreboard players={players} scores={scores} lowerScoreWins={game.lowerScoreWins} />
+      )}
 
-      <Board
-        players={players}
-        state={match.state}
-        setState={(next) =>
-          updateMatchState(
-            match.id,
-            typeof next === 'function'
-              ? (next as (previous: unknown) => unknown)(match.state)
-              : next,
-          )
-        }
-        scores={scores}
-        isFinished={isFinished}
-        finish={() => finishMatch(match.id)}
-        reopen={() => reopenMatch(match.id)}
-      />
+      <Board {...boardProps} />
 
-      <Scoreboard players={players} scores={scores} lowerScoreWins={game.lowerScoreWins} />
-
-      <Divider />
-
-      <Stack gap="xs">
-        {isFinished ? (
-          <Button
-            variant="light"
-            leftSection={<ArrowsClockwiseIcon size={18} />}
-            onClick={() => reopenMatch(match.id)}
-          >
-            Reprendre la partie
-          </Button>
-        ) : (
-          <Button leftSection={<CheckIcon size={18} />} onClick={() => finishMatch(match.id)}>
-            Terminer la partie
-          </Button>
-        )}
+      {isFinished ? (
         <Button
-          variant="subtle"
-          color="red"
-          leftSection={<TrashIcon size={18} />}
-          onClick={() => {
-            deleteMatch(match.id);
-            navigate('/', { replace: true });
-          }}
+          variant="light"
+          leftSection={<ArrowsClockwiseIcon size={18} />}
+          onClick={() => reopenMatch(match.id)}
         >
-          Supprimer la partie
+          Reprendre la partie
         </Button>
-      </Stack>
+      ) : (
+        <Button leftSection={<CheckIcon size={18} />} onClick={() => finishMatch(match.id)}>
+          Terminer la partie
+        </Button>
+      )}
+
+      <Accordion variant="contained">
+        <Accordion.Item value="advanced">
+          <Accordion.Control>Avancé</Accordion.Control>
+          <Accordion.Panel>
+            <Stack gap="md">
+              <Text size="sm" c="dimmed">
+                Démarrée le {new Date(match.createdAt).toLocaleString('fr-FR')}
+              </Text>
+              {Details && <Details {...boardProps} />}
+              <Button
+                variant="subtle"
+                color="red"
+                leftSection={<TrashIcon size={18} />}
+                onClick={() => {
+                  deleteMatch(match.id);
+                  navigate('/', { replace: true });
+                }}
+              >
+                Supprimer la partie
+              </Button>
+            </Stack>
+          </Accordion.Panel>
+        </Accordion.Item>
+      </Accordion>
     </Stack>
   );
 }
